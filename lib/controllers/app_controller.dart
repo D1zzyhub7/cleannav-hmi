@@ -16,13 +16,13 @@ class AppController extends ChangeNotifier {
   StreamSubscription<VehicleState>? _subscription;
   bool busy = false;
   String? error;
-  String apiBase = 'https://example.com/api/bridge';
+  String apiBase = '';
   String token = '';
   String bleDeviceId = '';
 
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
-    apiBase = prefs.getString('api_base') ?? apiBase;
+    apiBase = prefs.getString('api_base') ?? '';
     token = prefs.getString('token') ?? '';
     bleDeviceId = prefs.getString('ble_device_id') ?? '';
     await useDemo();
@@ -49,7 +49,17 @@ class AppController extends ChangeNotifier {
   Future<void> useDemo() => _activate(DemoTransport());
 
   Future<void> connectNetwork(String url, String accessToken) async {
-    apiBase = url.trim(); token = accessToken.trim();
+    final normalized = url.trim();
+    final parsed = Uri.tryParse(normalized);
+    if (normalized.isEmpty ||
+        parsed == null ||
+        (parsed.scheme != 'http' && parsed.scheme != 'https') ||
+        parsed.host.isEmpty) {
+      error = '请输入有效的 http 或 https 网关地址';
+      notifyListeners();
+      return;
+    }
+    apiBase = normalized; token = accessToken.trim();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('api_base', apiBase); await prefs.setString('token', token);
     await _activate(HttpTransport(baseUrl: apiBase, token: token));
@@ -64,11 +74,11 @@ class AppController extends ChangeNotifier {
 
   Future<List<({String id, String name, int rssi})>> scanBluetooth() => BleTransport.scan();
 
-  Future<void> execute(int taskId, {bool safetyConfirmed = false}) async {
+  Future<void> execute(int taskId, {bool userConfirmed = false}) async {
     if (busy) return;
     busy = true; error = null; notifyListeners();
     try {
-      await _transport?.sendTask(taskId, safetyConfirmed: safetyConfirmed);
+      await _transport?.sendTask(taskId, userConfirmed: userConfirmed);
     } catch (exception) {
       error = exception.toString();
       rethrow;

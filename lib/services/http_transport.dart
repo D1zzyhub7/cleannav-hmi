@@ -6,6 +6,20 @@ import 'package:http/http.dart' as http;
 import '../models/vehicle_state.dart';
 import 'vehicle_transport.dart';
 
+Map<String, dynamic> buildHttpTaskPayload({
+  required int taskId,
+  required String commandId,
+  required int timestampMs,
+  bool userConfirmed = false,
+  int validForMs = 10000,
+}) => {
+  'command_id': commandId,
+  'task_id': taskId,
+  'timestamp_ms': timestampMs,
+  'valid_for_ms': validForMs,
+  'user_confirmed': userConfirmed,
+};
+
 class HttpTransport implements VehicleTransport {
   HttpTransport({required this.baseUrl, this.token = ''});
   final String baseUrl;
@@ -38,14 +52,15 @@ class HttpTransport implements VehicleTransport {
   }
 
   @override
-  Future<void> sendTask(int taskId, {bool safetyConfirmed = false}) async {
+  Future<void> sendTask(int taskId, {bool userConfirmed = false}) async {
     final now = DateTime.now().millisecondsSinceEpoch;
     final path = taskId == 7 ? '/api/emergency-reset' : '/api/tasks';
-    final body = <String, dynamic>{
-      'command_id': 'app-$now-${taskId.toString().padLeft(2, '0')}',
-      'task_id': taskId, 'timestamp_ms': now, 'valid_for_ms': 10000,
-      if (taskId == 7) 'safety_confirmed': safetyConfirmed,
-    };
+    final body = buildHttpTaskPayload(
+      taskId: taskId,
+      commandId: 'app-$now-${taskId.toString().padLeft(2, '0')}',
+      timestampMs: now,
+      userConfirmed: userConfirmed,
+    );
     final response = await http.post(_uri(path), headers: _headers, body: jsonEncode(body)).timeout(const Duration(seconds: 5));
     if (response.statusCode < 200 || response.statusCode >= 300) throw TransportException('任务下发失败：${response.statusCode} ${response.body}');
     await _poll();

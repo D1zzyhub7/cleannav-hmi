@@ -68,6 +68,6 @@ class TasksPage extends StatelessWidget {
       confirmed = await showDialog<bool>(context:context,builder:(context)=>AlertDialog(title:Text(task.label),content:Text(task.id==6?'将立即停止车辆自主运动和清扫输出。':'${task.detail}，确认继续吗？'),actions:[TextButton(onPressed:()=>Navigator.pop(context,false),child:const Text('取消')),FilledButton(style:FilledButton.styleFrom(backgroundColor:task.danger?AppColors.red:AppColors.greenDark),onPressed:()=>Navigator.pop(context,true),child:const Text('确认执行'))]))??false;
     }
     if (!confirmed) return;
-    try {await controller.execute(task.id);if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('${task.label}已下发')));} catch(error){if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(error.toString()),backgroundColor:AppColors.red));}
+    try {await controller.execute(task.id,userConfirmed:confirmed);if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('${task.label}已下发')));} catch(error){if(context.mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text(error.toString()),backgroundColor:AppColors.red));}
   }
 }

@@ -17,7 +17,11 @@ class DemoTransport implements VehicleTransport {
 
   @override
   Future<void> connect() async {
-    _emit(_state.copyWith(connection: ConnectionKind.demo, message: '演示车辆已连接'));
+    _emit(_state.copyWith(
+      connection: ConnectionKind.demo,
+      localizationOk: true,
+      message: '演示车辆已连接',
+    ));
     _timer ??= Timer.periodic(const Duration(milliseconds: 450), (_) => _tick());
   }
 
@@ -83,7 +87,7 @@ class DemoTransport implements VehicleTransport {
   }
 
   @override
-  Future<void> sendTask(int taskId, {bool safetyConfirmed = false}) async {
+  Future<void> sendTask(int taskId, {bool userConfirmed = false}) async {
     final task = taskById(taskId);
     if (_state.emergencyStop && taskId != 7) throw const TransportException('急停锁定中，请先确认现场安全');
     switch (taskId) {
@@ -105,7 +109,7 @@ class DemoTransport implements VehicleTransport {
         _emit(_state.copyWith(mode: VehicleMode.emergency, speed: 0, emergencyStop: true, brushOn: false, waterPumpOn: false, message: '软件急停已触发，自主输出关闭'));
         return;
       case 7:
-        if (!safetyConfirmed) throw const TransportException('缺少现场安全确认');
+        if (!userConfirmed) throw const TransportException('缺少现场安全确认');
         _suspendedTask = null;
         _emit(_state.copyWith(mode: VehicleMode.standby, speed: 0, progress: 0, clearTask: true, emergencyStop: false, brushOn: false, waterPumpOn: false, message: '急停已解除，车辆保持待机'));
         return;

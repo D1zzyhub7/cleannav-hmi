@@ -35,7 +35,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     const SizedBox(height:14),
     SectionCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
       const Text('网络连接',style:TextStyle(color:AppColors.ink,fontSize:18,fontWeight:FontWeight.w800)),const SizedBox(height:4),const Text('通过 HTTPS 安全网关连接实验室 ROS 2 Bridge',style:TextStyle(color:AppColors.muted,fontSize:11)),const SizedBox(height:14),
-      TextField(controller:url,keyboardType:TextInputType.url,decoration:_decoration('API 地址','https://example.com/api/bridge',Icons.language)),const SizedBox(height:10),
+      TextField(controller:url,keyboardType:TextInputType.url,decoration:_decoration('API 地址','http://车辆IP:8765',Icons.language)),const SizedBox(height:10),
       TextField(controller:token,obscureText:true,decoration:_decoration('访问令牌','Bearer Token',Icons.key)),const SizedBox(height:12),
       FilledButton.icon(onPressed:widget.controller.busy?null:()=>widget.controller.connectNetwork(url.text,token.text),icon:const Icon(Icons.cloud_done),label:const Text('连接网络网关'),style:FilledButton.styleFrom(minimumSize:const Size.fromHeight(48),backgroundColor:AppColors.greenDark,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(15))))
     ])),

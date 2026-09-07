@@ -4,6 +4,9 @@
 .metadata
 .packages
 build/
+install/
+log/
+**/__pycache__/
 android/local.properties
 android/.gradle/
 ios/Flutter/Generated.xcconfig

@@ -52,10 +52,10 @@ flutter run
 在 APP“连接”页面填写：
 
 ```text
-https://你的域名/api/bridge
+http://车辆IP:8765
 ```
 
-网络适配器调用：
+网络适配器调用（HTTP/HTTPS）：
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
@@ -66,7 +66,7 @@ https://你的域名/api/bridge
 API 地址必须是手机可访问的地址。正式部署应使用可信 HTTPS、短期访问令牌、用户/车辆
 权限、操作审计、限流和重放保护，不应把无认证 ROS 2 Bridge 直接暴露在公网。
 
-当前冻结 `RobotStatus.msg` 没有电池、充电、刷盘和水泵字段，因此现有 Bridge 下这些
+当前冻结 `RobotStatus.msg` 没有电池、充电、刷盘和水泵字段，因此现有 Gateway 下这些
 项目会显示“未提供”或关闭；演示模式可完整展示。实车若要显示这些状态，应由车辆状态
 聚合节点在 HTTP/BLE 状态中增加 `battery`、`charging`、`brush_on`、`water_pump_on`，
 或在下一版接口规范中正式扩展消息，不能由 APP 随意猜测设备状态。
@@ -83,7 +83,7 @@ State:   0000c102-0000-1000-8000-00805f9b34fb
 
 - Command characteristic：APP 写入 UTF-8 JSON，每帧以换行结束；
 - State characteristic：车端 Notify UTF-8 JSON 状态；
-- task_id 7 必须携带 `safety_confirmed: true`；
+- 新版命令统一携带 `user_confirmed`；Gateway 暂时兼容旧的 `safety_confirmed` 别名；
 - 所有报文携带 `interface_version: "1.0"`。
 
 这些 UUID 是开发占位值。接入实车前必须与车端固件统一，并增加设备绑定、挑战应答、
@@ -111,8 +111,14 @@ flutter build ipa --release
 
 ## 联调顺序
 
+正式推荐链为：Flutter HTTP → HMI Gateway → ROS 2 TaskCommand → Mission Manager。
+Gateway 的 `POST` 返回 202 只表示命令已接收并提交到 ROS 队列，不代表 Mission
+Manager 已接受或正在执行。Gateway 支持 `GET /api/state`、`POST /api/tasks` 和
+`POST /api/emergency-reset`，手机与车端必须位于可达网络；生产环境应配置 bearer token，
+不要在文档或代码中写死车载 IP。
+
 1. 先在演示模式逐项验证七套任务路线和车辆状态；
-2. 网络模式接现有 APP Bridge，核对 `/api/state` 字段；
+2. 网络模式连接 `cleannav_hmi_gateway`，核对 `/api/state` 字段；
 3. 确定车端 BLE UUID、MTU、分帧、应答和鉴权协议；
 4. 真机测试断网、断蓝牙、急停、重复指令和状态超时；
 5. 最后接 Mission Manager 与 Safety Supervisor。

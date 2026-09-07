@@ -5,7 +5,7 @@ abstract class VehicleTransport {
   ConnectionKind get kind;
   Future<void> connect();
   Future<void> disconnect();
-  Future<void> sendTask(int taskId, {bool safetyConfirmed = false});
+  Future<void> sendTask(int taskId, {bool userConfirmed = false});
   Future<void> dispose();
 }
 

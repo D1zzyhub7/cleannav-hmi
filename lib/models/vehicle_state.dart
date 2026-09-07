@@ -25,7 +25,7 @@ class VehicleState {
     this.emergencyStop = false,
     this.brushOn = false,
     this.waterPumpOn = false,
-    this.localizationOk = true,
+    this.localizationOk = false,
     this.charging = false,
   });
 
@@ -75,7 +75,7 @@ class VehicleState {
     }
     final rawMode = (robot['mode'] ?? robot['system_state'] ?? robot['systemState'] ?? 'STANDBY').toString().toUpperCase();
     final taskState = (taskJson?['state'] ?? '').toString().toUpperCase();
-    final emergency = robot['emergency_stop'] == true || robot['emergencyStop'] == true || rawMode.contains('EMERGENCY') || taskState == 'EMERGENCY_STOPPED';
+    final emergency = robot['emergency_stop'] == true || robot['emergency_stop_active'] == true || robot['emergencyStop'] == true || rawMode.contains('EMERGENCY') || taskState == 'EMERGENCY_STOPPED';
     final offline = robot['connection']?.toString().toLowerCase() == 'offline';
     final charging = robot['charging'] == true || rawMode == 'CHARGING';
     final mode = offline ? VehicleMode.offline : emergency ? VehicleMode.emergency : charging ? VehicleMode.charging : switch (taskState) {
@@ -83,24 +83,28 @@ class VehicleState {
       'NAVIGATING' => VehicleMode.navigating, 'PAUSED' => VehicleMode.paused,
       'RETURNING_HOME' => VehicleMode.returning,
       _ => switch (rawMode) {
-        'RUNNING' || 'NAVIGATING' || 'BUSY' => VehicleMode.navigating,
+        'RUNNING' || 'NAVIGATING' || 'BUSY' || 'SYSTEM_BUSY' => VehicleMode.navigating,
         'CLEANING' => VehicleMode.cleaning, 'PAUSED' => VehicleMode.paused,
         'RETURNING' || 'RETURNING_HOME' => VehicleMode.returning,
-        'PLANNING' => VehicleMode.planning, 'ERROR' => VehicleMode.error,
+        'PLANNING' => VehicleMode.planning,
+        'SYSTEM_READY' => VehicleMode.standby,
+        'SYSTEM_PAUSED' => VehicleMode.paused,
+        'SYSTEM_ERROR' || 'SYSTEM_BLOCKED' || 'ERROR' => VehicleMode.error,
         _ => VehicleMode.standby,
       },
     };
     final batteryValue = robot['battery'] ?? robot['battery_percent'];
+    final speedValue = robot['linear_velocity_mps'] ?? robot['speed'] ?? robot['linear_speed'] ?? 0;
     return VehicleState(
       mode: mode, connection: kind,
       battery: batteryValue is num ? batteryValue.toDouble() : -1,
-      speed: ((robot['speed'] ?? robot['linear_speed'] ?? 0) as num).toDouble(),
+      speed: speedValue is num ? speedValue.toDouble() : 0,
       progress: ((taskJson?['progress'] ?? 0) as num).toDouble().clamp(0, 1).toDouble(),
       route: task?.route ?? RouteKind.patrol, task: task,
       message: (taskJson?['message'] ?? robot['message'] ?? mode.label).toString(),
       emergencyStop: emergency, brushOn: robot['brush_on'] == true || robot['brushOn'] == true,
       waterPumpOn: robot['water_pump_on'] == true || robot['waterPumpOn'] == true,
-      localizationOk: robot['localization_ok'] != false && robot['localization'] != false,
+      localizationOk: robot['localization_ok'] == true,
       charging: charging,
     );
   }

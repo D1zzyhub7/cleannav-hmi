@@ -82,7 +82,7 @@ class BleTransport implements VehicleTransport {
   }
 
   @override
-  Future<void> sendTask(int taskId, {bool safetyConfirmed = false}) async {
+  Future<void> sendTask(int taskId, {bool userConfirmed = false}) async {
     final characteristic = _command;
     if (characteristic == null) throw const TransportException('蓝牙尚未连接');
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -90,7 +90,7 @@ class BleTransport implements VehicleTransport {
       'interface_version': '1.0',
       'command_id': 'ble-$now-${taskId.toString().padLeft(2, '0')}',
       'task_id': taskId, 'timestamp_ms': now, 'valid_for_ms': 10000,
-      if (taskId == 7) 'safety_confirmed': safetyConfirmed,
+      'user_confirmed': userConfirmed,
     })}\n');
     await characteristic.write(frame, withoutResponse: characteristic.properties.writeWithoutResponse);
   }
