@@ -69,9 +69,6 @@ def _default_robot() -> dict:
         'navigation_active': False,
         'emergency_stop': False,
         'autonomous_enabled': False,
-        'linear_velocity_mps': 0.0,
-        'angular_velocity_rps': 0.0,
-        'speed': 0.0,
         'message': '尚未收到 RobotStatus',
     }
 

@@ -1,83 +1,136 @@
-"""ROS 2 node owning the HMI HTTP ingress and status cache."""
+"""PC HMI gateway relaying APP tasks to J6 and serving ROS map/state."""
 
 from __future__ import annotations
 
-from queue import Empty, Full, Queue
+import time
 
-from cleannav_interfaces.msg import RobotStatus, TaskCommand, TaskStatus
+from cleannav_interfaces.msg import RobotStatus, TaskStatus
+from geometry_msgs.msg import PoseWithCovarianceStamped
+from nav_msgs.msg import OccupancyGrid
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import (
+    QoSDurabilityPolicy,
+    QoSHistoryPolicy,
+    QoSProfile,
+    QoSReliabilityPolicy,
+)
 
+from .hil_state import HilStateProvider
 from .http_server import GatewayHttpServer
+from .j6_hil_client import AppTaskRelay, DEFAULT_J6_BASE_URL, J6HilClient
+from .map_cache import OccupancyMapCache
 from .status_cache import StatusCache
 
 
-TASK_COMMAND_TOPIC = '/cleannav/hmi/task_command'
-TASK_STATUS_TOPIC = '/cleannav/task_status'
+TASK_STATUS_TOPIC = '/cleannav/hil_pc/task_status'
 ROBOT_STATUS_TOPIC = '/cleannav/robot_status'
+RTAB_MAP_TOPIC = '/rtabmap/map'
+LOCALIZATION_TOPIC = '/rtabmap/localization_pose'
 
 
 class GatewayNode(Node):
-    """Queue HTTP commands, publish them from a ROS timer, and expose state."""
+    """Expose the phone API without bypassing J6 Mission Manager ingress."""
 
     def __init__(self, **kwargs) -> None:
         super().__init__('cleannav_hmi_gateway', **kwargs)
-        host = self.declare_parameter('bind_host', '127.0.0.1').value
-        port = self.declare_parameter('port', 8765).value
+        host = self.declare_parameter('bind_host', '0.0.0.0').value
+        port = self.declare_parameter('port', 18082).value
         access_token = self.declare_parameter('access_token', '').value
-        queue_depth = self.declare_parameter('command_queue_depth', 64).value
-        self._command_queue = Queue(maxsize=int(queue_depth))
-        self._task_command_pub = self.create_publisher(
-            TaskCommand, TASK_COMMAND_TOPIC, 10)
+        j6_base_url = self.declare_parameter(
+            'j6_base_url', DEFAULT_J6_BASE_URL).value
+        j6_timeout_sec = self.declare_parameter(
+            'j6_timeout_sec', 2.5).value
+        task_status_topic = self.declare_parameter(
+            'task_status_topic', TASK_STATUS_TOPIC).value
+        robot_status_topic = self.declare_parameter(
+            'robot_status_topic', ROBOT_STATUS_TOPIC).value
+        map_topic = self.declare_parameter(
+            'map_topic', RTAB_MAP_TOPIC).value
+        localization_topic = self.declare_parameter(
+            'localization_topic', LOCALIZATION_TOPIC).value
         self._status_cache = StatusCache()
+        self._map_cache = OccupancyMapCache()
+        self._j6_client = J6HilClient(
+            str(j6_base_url), timeout_sec=float(j6_timeout_sec))
+        self._task_relay = AppTaskRelay(
+            self._j6_client,
+            on_received=self._log_task_received,
+            on_forwarded=self._log_task_forwarded,
+        )
+        self._state_provider = HilStateProvider(
+            self._j6_client, self._status_cache)
+        task_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=10,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+        )
         self._task_status_sub = self.create_subscription(
-            TaskStatus, TASK_STATUS_TOPIC, self._task_status_cb, 10)
+            TaskStatus, task_status_topic, self._task_status_cb, task_qos)
         self._robot_status_sub = self.create_subscription(
-            RobotStatus, ROBOT_STATUS_TOPIC, self._robot_status_cb, 10)
-        self._drain_timer = self.create_timer(0.01, self._drain_commands)
+            RobotStatus, robot_status_topic, self._robot_status_cb, 10)
+        map_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        pose_qos = QoSProfile(
+            history=QoSHistoryPolicy.KEEP_LAST,
+            depth=1,
+            reliability=QoSReliabilityPolicy.RELIABLE,
+            durability=QoSDurabilityPolicy.VOLATILE,
+        )
+        self._map_sub = self.create_subscription(
+            OccupancyGrid, map_topic, self._map_cb, map_qos)
+        self._localization_sub = self.create_subscription(
+            PoseWithCovarianceStamped,
+            localization_topic,
+            self._localization_cb,
+            pose_qos,
+        )
+        self._last_map_log_monotonic = float('-inf')
         self._http_server = GatewayHttpServer(
             host,
             int(port),
             str(access_token),
-            self._enqueue_http_command,
-            self._status_cache.snapshot,
+            self._task_relay.submit,
+            self._state_provider.snapshot,
+            self._map_cache.snapshot,
         )
         self._http_server.start()
+        self.get_logger().info(
+            f'HMI_GATEWAY_READY bind={host}:{int(port)} '
+            f'j6={str(j6_base_url).rstrip("/")}')
 
-    def _enqueue_http_command(self, command: dict) -> bool:
-        try:
-            self._command_queue.put_nowait(command)
-        except Full:
-            return False
-        return True
+    def _log_task_received(self, command: dict) -> None:
+        self.get_logger().info(
+            f'APP_TASK_RECEIVED task_id={command["task_id"]} '
+            f'command_id={command["command_id"]}')
 
-    def _duration_parts(self, valid_for_ms: float) -> tuple[int, int]:
-        total_ns = int(round(float(valid_for_ms) * 1_000_000))
-        return divmod(total_ns, 1_000_000_000)
+    def _log_task_forwarded(self, payload: dict, status: int) -> None:
+        self.get_logger().info(
+            f'J6_TASK_FORWARDED task_id={payload["task_id"]} '
+            f'source={payload["source"]} status={status}')
 
-    def _to_ros_command(self, command: dict) -> TaskCommand:
-        message = TaskCommand()
-        message.header.stamp = self.get_clock().now().to_msg()
-        message.header.frame_id = ''
-        message.interface_version = '1.0'
-        message.command_id = command['command_id']
-        message.source = TaskCommand.SOURCE_APP
-        message.task_id = command['task_id']
-        message.confidence = 1.0
-        message.user_confirmed = command['user_confirmed']
-        message.raw_text = f"http:{command['endpoint']}"
-        message.valid_for.sec, message.valid_for.nanosec = (
-            self._duration_parts(command['valid_for_ms'])
-        )
-        return message
+    def _map_cb(self, message: OccupancyGrid) -> None:
+        if not self._map_cache.update_map(message):
+            self.get_logger().warning('Rejected invalid RTAB OccupancyGrid')
+            return
+        now = time.monotonic()
+        if now - self._last_map_log_monotonic >= 5.0:
+            self._last_map_log_monotonic = now
+            self.get_logger().info(
+                f'RTAB_MAP_RECEIVED width={message.info.width} '
+                f'height={message.info.height} '
+                f'resolution={message.info.resolution}')
 
-    def _drain_commands(self) -> None:
-        while True:
-            try:
-                command = self._command_queue.get_nowait()
-            except Empty:
-                return
-            self._task_command_pub.publish(self._to_ros_command(command))
+    def _localization_cb(
+        self,
+        message: PoseWithCovarianceStamped,
+    ) -> None:
+        self._map_cache.update_robot_pose(message)
 
     def _task_status_cb(self, message: TaskStatus) -> None:
         self._status_cache.update_task(message)
@@ -106,8 +159,9 @@ def main(args=None) -> None:
 
 __all__ = [
     'GatewayNode',
+    'LOCALIZATION_TOPIC',
     'ROBOT_STATUS_TOPIC',
-    'TASK_COMMAND_TOPIC',
+    'RTAB_MAP_TOPIC',
     'TASK_STATUS_TOPIC',
     'main',
 ]

@@ -9,6 +9,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread, current_thread
 from urllib.parse import urlsplit
 
+from .j6_hil_client import SubmissionResult
+
 
 COMMAND_ID_PATTERN = re.compile(r'^[A-Za-z0-9._:-]+$')
 MAX_BODY_BYTES = 16 * 1024
@@ -121,10 +123,23 @@ class _RequestHandler(BaseHTTPRequestHandler):
         if not self._authorized():
             self._json_response(401, {'error': 'unauthorized'})
             return
-        if urlsplit(self.path).path != '/api/state':
-            self._json_response(404, {'error': 'not found'})
+        path = urlsplit(self.path).path
+        if path == '/api/state':
+            self._json_response(200, self.server.gateway.state_provider())
             return
-        self._json_response(200, self.server.gateway.state_provider())
+        if path == '/api/map':
+            provider = self.server.gateway.map_provider
+            map_snapshot = provider() if provider is not None else None
+            if map_snapshot is None:
+                self._json_response(503, {
+                    'ok': False,
+                    'available': False,
+                    'error': 'RTAB-Map OccupancyGrid is unavailable',
+                })
+                return
+            self._json_response(200, map_snapshot)
+            return
+        self._json_response(404, {'error': 'not found'})
 
     def do_POST(self):
         if not self._authorized():
@@ -155,7 +170,11 @@ class _RequestHandler(BaseHTTPRequestHandler):
         ) as exc:
             self._json_response(400, {'error': str(exc)})
             return
-        if not self.server.gateway.submit_command(command):
+        result = self.server.gateway.submit_command(command)
+        if isinstance(result, SubmissionResult):
+            self._json_response(result.status_code, result.body)
+            return
+        if not result:
             self._json_response(503, {'error': 'command queue is full'})
             return
         self._json_response(202, {
@@ -175,12 +194,14 @@ class GatewayHttpServer:
         access_token,
         submit_command,
         state_provider,
+        map_provider=None,
     ):
         self.host = host
         self.port = int(port)
         self.access_token = access_token
         self.submit_command = submit_command
         self.state_provider = state_provider
+        self.map_provider = map_provider
         self._server = None
         self._thread: Thread | None = None
 
