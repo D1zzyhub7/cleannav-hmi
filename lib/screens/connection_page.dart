@@ -34,8 +34,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     ])),
     const SizedBox(height:14),
     SectionCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-      const Text('网络连接',style:TextStyle(color:AppColors.ink,fontSize:18,fontWeight:FontWeight.w800)),const SizedBox(height:4),const Text('通过 HTTPS 安全网关连接实验室 ROS 2 Bridge',style:TextStyle(color:AppColors.muted,fontSize:11)),const SizedBox(height:14),
-      TextField(controller:url,keyboardType:TextInputType.url,decoration:_decoration('API 地址','http://车辆IP:8765',Icons.language)),const SizedBox(height:10),
+      const Text('CleanNav PC Gateway',style:TextStyle(color:AppColors.ink,fontSize:18,fontWeight:FontWeight.w800)),const SizedBox(height:4),const Text('通过局域网连接 CleanNav PC HIL Gateway',style:TextStyle(color:AppColors.muted,fontSize:11)),const SizedBox(height:14),
+      TextField(controller:url,keyboardType:TextInputType.url,decoration:_decoration('PC Gateway 地址','http://<PC Wi-Fi IP>:18082',Icons.language)),const SizedBox(height:10),
       TextField(controller:token,obscureText:true,decoration:_decoration('访问令牌','Bearer Token',Icons.key)),const SizedBox(height:12),
       FilledButton.icon(onPressed:widget.controller.busy?null:()=>widget.controller.connectNetwork(url.text,token.text),icon:const Icon(Icons.cloud_done),label:const Text('连接网络网关'),style:FilledButton.styleFrom(minimumSize:const Size.fromHeight(48),backgroundColor:AppColors.greenDark,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(15))))
     ])),
@@ -56,6 +56,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   InputDecoration _decoration(String label,String hint,IconData icon)=>InputDecoration(labelText:label,hintText:hint,prefixIcon:Icon(icon),filled:true,fillColor:const Color(0xFFF4F8F7),border:OutlineInputBorder(borderRadius:BorderRadius.circular(15),borderSide:BorderSide.none));
   IconData _connectionIcon()=>switch(widget.controller.state.connection){ConnectionKind.demo=>Icons.science,ConnectionKind.network=>Icons.cloud_done,ConnectionKind.bluetooth=>Icons.bluetooth_connected};
-  String _connectionName()=>switch(widget.controller.state.connection){ConnectionKind.demo=>'本地演示车辆',ConnectionKind.network=>'HTTPS 网络网关',ConnectionKind.bluetooth=>'BLE 清扫车'};
+  String _connectionName()=>switch(widget.controller.state.connection){ConnectionKind.demo=>'本地演示车辆',ConnectionKind.network=>'CleanNav PC Gateway',ConnectionKind.bluetooth=>'BLE 清扫车'};
   Future<void> _scan() async{setState(()=>scanning=true);try{devices=await widget.controller.scanBluetooth();}catch(error){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('蓝牙扫描失败：$error')));}finally{if(mounted)setState(()=>scanning=false);}}
 }

@@ -25,6 +25,8 @@ class VehicleState {
     this.emergencyStop = false,
     this.brushOn = false,
     this.waterPumpOn = false,
+    this.brushKnown = false,
+    this.waterPumpKnown = false,
     this.localizationOk = false,
     this.charging = false,
   });
@@ -40,6 +42,8 @@ class VehicleState {
   final bool emergencyStop;
   final bool brushOn;
   final bool waterPumpOn;
+  final bool brushKnown;
+  final bool waterPumpKnown;
   final bool localizationOk;
   final bool charging;
 
@@ -47,6 +51,7 @@ class VehicleState {
     VehicleMode? mode, ConnectionKind? connection, double? battery, double? speed,
     double? progress, RouteKind? route, String? message, TaskDefinition? task,
     bool clearTask = false, bool? emergencyStop, bool? brushOn, bool? waterPumpOn,
+    bool? brushKnown, bool? waterPumpKnown,
     bool? localizationOk, bool? charging,
   }) => VehicleState(
     mode: mode ?? this.mode, connection: connection ?? this.connection,
@@ -55,12 +60,14 @@ class VehicleState {
     message: message ?? this.message, task: clearTask ? null : task ?? this.task,
     emergencyStop: emergencyStop ?? this.emergencyStop, brushOn: brushOn ?? this.brushOn,
     waterPumpOn: waterPumpOn ?? this.waterPumpOn, localizationOk: localizationOk ?? this.localizationOk,
+    brushKnown: brushKnown ?? this.brushKnown, waterPumpKnown: waterPumpKnown ?? this.waterPumpKnown,
     charging: charging ?? this.charging,
   );
 
   factory VehicleState.initial() => const VehicleState(
     mode: VehicleMode.standby, connection: ConnectionKind.demo, battery: 78,
     speed: 0, progress: 0, route: RouteKind.patrol, message: '车辆已就绪',
+    brushKnown: true, waterPumpKnown: true,
   );
 
   factory VehicleState.fromJson(Map<String, dynamic> json, ConnectionKind kind) {
@@ -94,16 +101,19 @@ class VehicleState {
       },
     };
     final batteryValue = robot['battery'] ?? robot['battery_percent'];
-    final speedValue = robot['linear_velocity_mps'] ?? robot['speed'] ?? robot['linear_speed'] ?? 0;
+    final speedValue = robot['linear_velocity_mps'] ?? robot['speed'] ?? robot['linear_speed'];
+    final brushKnown = robot.containsKey('brush_on') || robot.containsKey('brushOn');
+    final waterPumpKnown = robot.containsKey('water_pump_on') || robot.containsKey('waterPumpOn');
     return VehicleState(
       mode: mode, connection: kind,
       battery: batteryValue is num ? batteryValue.toDouble() : -1,
-      speed: speedValue is num ? speedValue.toDouble() : 0,
+      speed: speedValue is num ? speedValue.toDouble() : -1,
       progress: ((taskJson?['progress'] ?? 0) as num).toDouble().clamp(0, 1).toDouble(),
       route: task?.route ?? RouteKind.patrol, task: task,
       message: (taskJson?['message'] ?? robot['message'] ?? mode.label).toString(),
       emergencyStop: emergency, brushOn: robot['brush_on'] == true || robot['brushOn'] == true,
       waterPumpOn: robot['water_pump_on'] == true || robot['waterPumpOn'] == true,
+      brushKnown: brushKnown, waterPumpKnown: waterPumpKnown,
       localizationOk: robot['localization_ok'] == true,
       charging: charging,
     );

@@ -52,14 +52,14 @@ class OverviewPage extends StatelessWidget {
       const SizedBox(height: 14),
       GridView.count(shrinkWrap:true,physics:const NeverScrollableScrollPhysics(),crossAxisCount:2,crossAxisSpacing:12,mainAxisSpacing:12,childAspectRatio:1.17,children:[
         MetricTile(icon:state.charging?Icons.battery_charging_full:Icons.battery_5_bar,label:'剩余电量',value:state.battery<0?'--':'${state.battery.toStringAsFixed(0)}%',color:state.battery>=0&&state.battery<20?AppColors.red:AppColors.green,caption:state.charging?'充电输入正常':state.battery<0?'当前接口未提供电量':'预计续航 ${(state.battery/20).toStringAsFixed(1)} h'),
-        MetricTile(icon:Icons.speed_rounded,label:'当前速度',value:'${state.speed.toStringAsFixed(2)} m/s',color:AppColors.blue,caption:state.speed>0?'车辆正在运动':'车辆静止'),
+        MetricTile(icon:Icons.speed_rounded,label:'当前速度',value:state.speed<0?'--':'${state.speed.toStringAsFixed(2)} m/s',color:AppColors.blue,caption:state.speed<0?'当前接口未提供速度':state.speed>0?'车辆正在运动':'车辆静止'),
         MetricTile(icon:Icons.gps_fixed_rounded,label:'定位状态',value:state.localizationOk?'正常':'异常',color:state.localizationOk?AppColors.green:AppColors.red,caption:'map 坐标系'),
-        MetricTile(icon:state.brushOn?Icons.cleaning_services:Icons.blur_circular,label:'清扫机构',value:state.brushOn?'工作中':'已关闭',color:state.brushOn?AppColors.green:AppColors.muted,caption:state.waterPumpOn?'水泵/吸水机构开启':'水泵关闭'),
+        MetricTile(icon:state.brushOn?Icons.cleaning_services:Icons.blur_circular,label:'清扫机构',value:state.brushKnown?(state.brushOn?'工作中':'已关闭'):'--',color:state.brushOn?AppColors.green:AppColors.muted,caption:state.waterPumpKnown?(state.waterPumpOn?'水泵/吸水机构开启':'水泵关闭'):'当前接口未提供机构状态'),
       ]),
       const SizedBox(height:14),
       SectionCard(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-        Row(children:[const Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('实时作业地图',style:TextStyle(color:AppColors.ink,fontSize:18,fontWeight:FontWeight.w800)),SizedBox(height:3),Text('路线随任务类型与执行进度变化',style:TextStyle(color:AppColors.muted,fontSize:11))])),StatusPill(text:'${(state.progress*100).round()}%',color:AppColors.green)]),
-        const SizedBox(height:14), MissionMap(state:state), const SizedBox(height:12),
+        Row(children:[Expanded(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('实时作业地图',style:TextStyle(color:AppColors.ink,fontSize:18,fontWeight:FontWeight.w800)),const SizedBox(height:3),Text(controller.map == null ? (state.connection == ConnectionKind.network ? '等待 PC RTAB-Map 数据' : '演示路线随任务进度变化') : 'RTAB-Map 2D occupancy grid',style:const TextStyle(color:AppColors.muted,fontSize:11))])),StatusPill(text:controller.map == null?'${(state.progress*100).round()}%':'MAP ${controller.map!.seq}',color:AppColors.green)]),
+        const SizedBox(height:14), MissionMap(state:state,map:controller.map), const SizedBox(height:12),
         Row(children:[_legend(AppColors.green,'已执行'),const SizedBox(width:15),_legend(const Color(0xFFB6C8C8),'待执行'),const Spacer(),Text(state.task?.label??'当前无任务',style:const TextStyle(color:AppColors.muted,fontSize:11))]),
       ])),
       const SizedBox(height:14),

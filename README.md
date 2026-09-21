@@ -1,7 +1,32 @@
 # CleanNav 手机 APP v0.2.0
 
-Flutter 原生 Android/iOS 控制端，支持本地演示、HTTPS 网络和 BLE 蓝牙三种连接方式。
+Flutter 原生 Android/iOS 控制端。当前 M0 Competition HIL 使用局域网 HTTP
+连接 PC HMI Gateway；HTTPS、BLE 和 J6-native Gateway 是后续部署方向。
 APP 继续遵循 CleanNav 冻结接口 v1.0，只发送 task_id，不直接发送速度、路径或自由坐标。
+
+## 当前 M0 Competition HIL 架构
+
+```text
+Phone APP
+    -> PC HMI Gateway (HTTP, default :18082)
+    -> J6 Mission Manager HTTP HIL (default :18081)
+    -> PC simulation/navigation execution
+```
+
+任务仍由 J6 Mission Manager 接收和裁决；PC Gateway 只负责 APP transport、状态聚合和
+地图转发，不发布 `/cmd_vel`。当前 PC map 链路为：
+
+```text
+RTAB-Map OccupancyGrid
+    -> PC HMI Gateway
+    -> APP /api/map
+```
+
+以上是 Competition HIL 路径，不是生产车辆部署拓扑。未来部署方向为：
+
+```text
+Phone APP -> J6-native HMI Gateway -> J6 Mission Manager
+```
 
 ## 已实现功能
 
@@ -9,7 +34,7 @@ APP 继续遵循 CleanNav 冻结接口 v1.0，只发送 task_id，不直接发�
 - 状态详情：电量、速度、定位、刷盘、水泵/吸水机构、任务进度和连接类型；
 - 13 个冻结任务：task_id 1–7、10、20、30–33；
 - 软件急停和独立现场安全复位；
-- 三种连接模式：演示、HTTPS、BLE；
+- 连接模式：本地演示、Competition HIL HTTP；
 - 七套差异化地图路线与动作表现。
 
 ## 差异化任务演示
@@ -49,10 +74,10 @@ flutter run
 
 ## 网络连接
 
-在 APP“连接”页面填写：
+在 APP“连接”页面填写 PC Gateway 地址：
 
 ```text
-http://车辆IP:8765
+http://<PC Wi-Fi IP>:18082
 ```
 
 网络适配器调用（HTTP/HTTPS）：
@@ -63,15 +88,16 @@ http://车辆IP:8765
 | POST | `/api/tasks` | 下发普通任务 |
 | POST | `/api/emergency-reset` | 安全确认后解除急停 |
 
-API 地址必须是手机可访问的地址。正式部署应使用可信 HTTPS、短期访问令牌、用户/车辆
-权限、操作审计、限流和重放保护，不应把无认证 ROS 2 Bridge 直接暴露在公网。
+API 地址必须是手机可访问的 PC 地址。当前 `AndroidManifest.xml` 的 cleartext HTTP
+设置仅服务于局域网 Competition HIL；正式部署必须改为 HTTPS、短期访问令牌、用户/车辆
+权限、操作审计、限流和重放保护，不应把无认证 Gateway 暴露在公网。
 
 当前冻结 `RobotStatus.msg` 没有电池、充电、刷盘和水泵字段，因此现有 Gateway 下这些
 项目会显示“未提供”或关闭；演示模式可完整展示。实车若要显示这些状态，应由车辆状态
 聚合节点在 HTTP/BLE 状态中增加 `battery`、`charging`、`brush_on`、`water_pump_on`，
 或在下一版接口规范中正式扩展消息，不能由 APP 随意猜测设备状态。
 
-## BLE 蓝牙连接
+## BLE 蓝牙连接（未来部署方向）
 
 开发阶段预留 UUID：
 
@@ -111,11 +137,14 @@ flutter build ipa --release
 
 ## 联调顺序
 
-正式推荐链为：Flutter HTTP → HMI Gateway → ROS 2 TaskCommand → Mission Manager。
-Gateway 的 `POST` 返回 202 只表示命令已接收并提交到 ROS 队列，不代表 Mission
-Manager 已接受或正在执行。Gateway 支持 `GET /api/state`、`POST /api/tasks` 和
-`POST /api/emergency-reset`，手机与车端必须位于可达网络；生产环境应配置 bearer token，
-不要在文档或代码中写死车载 IP。
+当前 M0 推荐链为：Flutter HTTP → PC HMI Gateway → J6 HTTP HIL → J6 Mission Manager。
+Gateway 会强制上游 `source=APP=2`，手机上传的 source 不会被信任。Gateway 的 `POST`
+返回 202 表示 J6 HTTP ingress 已接受投递，不代表任务已经完成。Gateway 支持
+`GET /api/state`、`GET /api/map`、`POST /api/tasks` 和 `POST /api/emergency-reset`。
+
+当前 HIL 默认地址 `http://192.168.8.10:18081` 只作为 Competition HIL 默认值，并可通过
+ROS parameter `j6_base_url` 覆盖；它不是 production 固定地址。正式部署仍需完成 HTTPS、
+鉴权、审计、限流、防重放和 J6-native Gateway。
 
 1. 先在演示模式逐项验证七套任务路线和车辆状态；
 2. 网络模式连接 `cleannav_hmi_gateway`，核对 `/api/state` 字段；

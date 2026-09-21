@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/task_definition.dart';
+import '../models/occupancy_map.dart';
 import '../models/vehicle_state.dart';
 import '../services/ble_transport.dart';
 import '../services/demo_transport.dart';
@@ -14,6 +15,8 @@ class AppController extends ChangeNotifier {
   VehicleState state = VehicleState.initial();
   VehicleTransport? _transport;
   StreamSubscription<VehicleState>? _subscription;
+  StreamSubscription<OccupancyMap?>? _mapSubscription;
+  OccupancyMap? map;
   bool busy = false;
   String? error;
   String apiBase = '';
@@ -32,15 +35,33 @@ class AppController extends ChangeNotifier {
     busy = true; error = null; notifyListeners();
     try {
       await _subscription?.cancel();
+      await _mapSubscription?.cancel();
       await _transport?.dispose();
+      map = null;
       _transport = next;
       _subscription = next.states.listen((incoming) {
         state = incoming; error = null; notifyListeners();
       });
+      if (next is HttpTransport) {
+        _mapSubscription = next.maps.listen((incoming) {
+          map = incoming;
+          notifyListeners();
+        });
+      } else {
+        _mapSubscription = null;
+      }
       await next.connect();
     } catch (exception) {
       error = exception.toString();
-      state = state.copyWith(mode: VehicleMode.offline, connection: next.kind, message: error);
+      final fallback = next.kind == ConnectionKind.network
+          ? VehicleState.initial().copyWith(
+              battery: -1,
+              speed: -1,
+              brushKnown: false,
+              waterPumpKnown: false,
+            )
+          : state;
+      state = fallback.copyWith(mode: VehicleMode.offline, connection: next.kind, message: error);
     } finally {
       busy = false; notifyListeners();
     }
@@ -97,6 +118,7 @@ class AppController extends ChangeNotifier {
   @override
   void dispose() {
     _subscription?.cancel();
+    _mapSubscription?.cancel();
     _transport?.dispose();
     super.dispose();
   }
