@@ -25,6 +25,7 @@ class OccupancyMap {
     required this.resolution,
     required this.origin,
     required this.data,
+    this.ageSec,
     this.robotPose,
   });
 
@@ -35,6 +36,7 @@ class OccupancyMap {
   final double resolution;
   final MapOrigin origin;
   final List<int> data;
+  final double? ageSec;
   final MapRobotPose? robotPose;
 
   factory OccupancyMap.fromJson(Map<String, dynamic> json) {
@@ -69,6 +71,7 @@ class OccupancyMap {
         yaw: (originJson['yaw'] as num).toDouble(),
       ),
       data: List.unmodifiable(data),
+      ageSec: (json['age_sec'] as num?)?.toDouble(),
       robotPose: robotJson == null
           ? null
           : MapRobotPose(

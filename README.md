@@ -1,153 +1,88 @@
-# CleanNav 手机 APP v0.2.0
+# CleanNav M1 Competition APP
 
-Flutter 原生 Android/iOS 控制端。当前 M0 Competition HIL 使用局域网 HTTP
-连接 PC HMI Gateway；HTTPS、BLE 和 J6-native Gateway 是后续部署方向。
-APP 继续遵循 CleanNav 冻结接口 v1.0，只发送 task_id，不直接发送速度、路径或自由坐标。
+Flutter Phone APP for the CleanNav Competition HIL runtime. The APP sends only
+upper-level task requests through the PC HMI Gateway; it does not publish ROS2
+topics, `/cmd_vel`, or Ackermann parameters.
 
-## 当前 M0 Competition HIL 架构
-
-```text
-Phone APP
-    -> PC HMI Gateway (HTTP, default :18082)
-    -> J6 Mission Manager HTTP HIL (default :18081)
-    -> PC simulation/navigation execution
-```
-
-任务仍由 J6 Mission Manager 接收和裁决；PC Gateway 只负责 APP transport、状态聚合和
-地图转发，不发布 `/cmd_vel`。当前 PC map 链路为：
+## Runtime architecture
 
 ```text
-RTAB-Map OccupancyGrid
-    -> PC HMI Gateway
-    -> APP /api/map
+Phone Flutter APP
+    -> PC / WSL HMI Gateway :18082
+    -> J6 HTTP HIL :18081
+    -> J6 Mission Manager
+    -> PC Navigation HIL
 ```
 
-以上是 Competition HIL 路径，不是生产车辆部署拓扑。未来部署方向为：
+The APP does not send `source`. The Gateway forces `source=APP` when forwarding
+the request to J6.
+
+## HTTP API
+
+The connection page accepts the current PC LAN address in this form:
 
 ```text
-Phone APP -> J6-native HMI Gateway -> J6 Mission Manager
+http://<PC current LAN IP>:18082
 ```
 
-## 已实现功能
+The IP address is intentionally not hard-coded because the hotspot address can
+change.
 
-- 车辆状态：离线、待机、规划、导航、清扫、暂停、返航、充电、急停和异常；
-- 状态详情：电量、速度、定位、刷盘、水泵/吸水机构、任务进度和连接类型；
-- 13 个冻结任务：task_id 1–7、10、20、30–33；
-- 软件急停和独立现场安全复位；
-- 连接模式：本地演示、Competition HIL HTTP；
-- 七套差异化地图路线与动作表现。
-
-## 差异化任务演示
-
-| task_id | 任务 | 地图与车辆行为 |
+| Method | Path | Purpose |
 | --- | --- | --- |
-| 1 | 开始清扫 | 全区域弓字形覆盖，刷盘和水泵开启 |
-| 5 | 返回起点 | 从当前位置生成独立返航轨迹，清扫机构关闭 |
-| 10 | 前往一号点 | 点到点导航，仅行驶不清扫 |
-| 20 | 执行一号路线 | 沿闭合预设路线连续清扫 |
-| 30 | 清扫落叶 | 接近目标后局部回旋，刷盘开启 |
-| 31 | 清扫落叶堆 | 低速接近，扩大覆盖范围，刷盘与水泵开启 |
-| 32 | 处理积水 | 沿积水边缘环绕，吸水机构开启 |
-| 33 | 最优先目标 | 导航到最高优先级目标后进行组合清扫 |
+| GET | `/api/state` | Gateway, J6, robot and TaskStatus state |
+| GET | `/api/map` | RTAB OccupancyGrid and robot pose |
+| POST | `/api/tasks` | Submit an upper-level task |
+| POST | `/api/emergency-reset` | Reset emergency stop after confirmation |
 
-## 首次生成 Android/iOS 工程
+The APP keeps these states separate:
 
-源码包没有包含数百 MB 的 Flutter 构建缓存。安装 Flutter 3.27 或更高版本后执行。
+- `Gateway connected`: `/api/state` returned HTTP 200;
+- `J6 connected`: top-level `j6_connected` is true;
+- `TaskStatus present`: locally inferred from execution/command ID, task ID,
+  or a non-`UNKNOWN` task state.
 
-Windows PowerShell：
+## Competition task
 
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\bootstrap.ps1
-flutter run
+The M1 competition task page exposes only:
+
+```text
+task_id: 30
+key: CLEAN_NEAREST_LEAF
+中文：清扫最近落叶
 ```
 
-Linux/macOS：
+The request contains a unique `command_id`, `task_id`, timestamp, validity
+period and optional confirmation. It does not contain `source`.
+
+## Real map
+
+`GET /api/map` is rendered as a real OccupancyGrid:
+
+- unknown cells are gray;
+- free cells are white;
+- occupied cells are dark gray/black;
+- ROS map rows are vertically flipped for screen coordinates;
+- origin, resolution and yaw are used for robot pose conversion;
+- the robot pose and heading are shown when available.
+
+No simulated route, target, or robot trajectory is rendered when the map is
+unavailable.
+
+## Android network requirement
+
+Android keeps `INTERNET` permission and
+`android:usesCleartextTraffic="true"` for the local-network HTTP HIL path.
+
+## Build
+
+After installing Flutter, regenerate dependencies and generated platform files:
 
 ```bash
-chmod +x scripts/bootstrap.sh
-./scripts/bootstrap.sh
-flutter run
-```
-
-脚本会生成标准 `android/`、`ios/` 目录，加入蓝牙权限，执行依赖安装、静态分析和测试。
-
-## 网络连接
-
-在 APP“连接”页面填写 PC Gateway 地址：
-
-```text
-http://<PC Wi-Fi IP>:18082
-```
-
-网络适配器调用（HTTP/HTTPS）：
-
-| 方法 | 路径 | 用途 |
-| --- | --- | --- |
-| GET | `/api/state` | 车辆、任务与设备状态 |
-| POST | `/api/tasks` | 下发普通任务 |
-| POST | `/api/emergency-reset` | 安全确认后解除急停 |
-
-API 地址必须是手机可访问的 PC 地址。当前 `AndroidManifest.xml` 的 cleartext HTTP
-设置仅服务于局域网 Competition HIL；正式部署必须改为 HTTPS、短期访问令牌、用户/车辆
-权限、操作审计、限流和重放保护，不应把无认证 Gateway 暴露在公网。
-
-当前冻结 `RobotStatus.msg` 没有电池、充电、刷盘和水泵字段，因此现有 Gateway 下这些
-项目会显示“未提供”或关闭；演示模式可完整展示。实车若要显示这些状态，应由车辆状态
-聚合节点在 HTTP/BLE 状态中增加 `battery`、`charging`、`brush_on`、`water_pump_on`，
-或在下一版接口规范中正式扩展消息，不能由 APP 随意猜测设备状态。
-
-## BLE 蓝牙连接（未来部署方向）
-
-开发阶段预留 UUID：
-
-```text
-Service: 0000c100-0000-1000-8000-00805f9b34fb
-Command: 0000c101-0000-1000-8000-00805f9b34fb
-State:   0000c102-0000-1000-8000-00805f9b34fb
-```
-
-- Command characteristic：APP 写入 UTF-8 JSON，每帧以换行结束；
-- State characteristic：车端 Notify UTF-8 JSON 状态；
-- 新版命令统一携带 `user_confirmed`；Gateway 暂时兼容旧的 `safety_confirmed` 别名；
-- 所有报文携带 `interface_version: "1.0"`。
-
-这些 UUID 是开发占位值。接入实车前必须与车端固件统一，并增加设备绑定、挑战应答、
-会话密钥和防重放计数。BLE 不应绕过车辆本地 Safety Supervisor。
-
-## 构建安装包
-
-Android 调试安装：
-
-```bash
+flutter pub get
+flutter analyze
+flutter test
 flutter build apk --debug
 ```
 
-Android 正式包：
-
-```bash
-flutter build appbundle --release
-```
-
-iOS 必须在 macOS/Xcode 环境配置 Apple 开发者签名后执行：
-
-```bash
-flutter build ipa --release
-```
-
-## 联调顺序
-
-当前 M0 推荐链为：Flutter HTTP → PC HMI Gateway → J6 HTTP HIL → J6 Mission Manager。
-Gateway 会强制上游 `source=APP=2`，手机上传的 source 不会被信任。Gateway 的 `POST`
-返回 202 表示 J6 HTTP ingress 已接受投递，不代表任务已经完成。Gateway 支持
-`GET /api/state`、`GET /api/map`、`POST /api/tasks` 和 `POST /api/emergency-reset`。
-
-当前 HIL 默认地址 `http://192.168.8.10:18081` 只作为 Competition HIL 默认值，并可通过
-ROS parameter `j6_base_url` 覆盖；它不是 production 固定地址。正式部署仍需完成 HTTPS、
-鉴权、审计、限流、防重放和 J6-native Gateway。
-
-1. 先在演示模式逐项验证七套任务路线和车辆状态；
-2. 网络模式连接 `cleannav_hmi_gateway`，核对 `/api/state` 字段；
-3. 确定车端 BLE UUID、MTU、分帧、应答和鉴权协议；
-4. 真机测试断网、断蓝牙、急停、重复指令和状态超时；
-5. 最后接 Mission Manager 与 Safety Supervisor。
+No build artifacts or commits are part of the M1 source change.

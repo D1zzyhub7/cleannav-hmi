@@ -1,68 +1,101 @@
 import 'dart:convert';
 
+import 'package:cleannav_mobile/models/hil_snapshot.dart';
 import 'package:cleannav_mobile/models/occupancy_map.dart';
-import 'package:cleannav_mobile/models/vehicle_state.dart';
 import 'package:cleannav_mobile/services/http_transport.dart';
 import 'package:cleannav_mobile/services/vehicle_transport.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
-void main() {
-  test('HTTP task payload uses generic user_confirmed', () {
-    final payload = buildHttpTaskPayload(
-      taskId: 7,
-      commandId: 'reset-1',
-      timestampMs: 123,
-      userConfirmed: true,
+http.Response _jsonResponse(Object body, int statusCode) => http.Response.bytes(
+      utf8.encode(jsonEncode(body)),
+      statusCode,
+      headers: {'content-type': 'application/json; charset=utf-8'},
     );
 
-    expect(payload['user_confirmed'], isTrue);
-    expect(payload.containsKey('safety_confirmed'), isFalse);
-    expect(payload['valid_for_ms'], 60000);
-  });
-
-  test('missing localization_ok is unsafe by default', () {
-    final state = VehicleState.fromJson({
-      'robot': {'system_state': 'SYSTEM_READY'},
-      'task': {'state': 'IDLE'},
-    }, ConnectionKind.network);
-
-    expect(state.localizationOk, isFalse);
-  });
-
-  test('canonical RobotStatus and TaskStatus fields are parsed', () {
-    final state = VehicleState.fromJson({
+Map<String, dynamic> _state({
+  bool j6Connected = false,
+  Map<String, dynamic>? task,
+}) => {
+      'j6_connected': j6Connected,
       'robot': {
-        'system_state': 'SYSTEM_BUSY',
+        'system_state': 'SYSTEM_READY',
         'localization_ok': true,
-        'linear_velocity_mps': 0.25,
+        'autonomous_enabled': false,
         'emergency_stop': false,
+        'message': 'J6 状态已收到',
       },
-      'task': {
-        'task_id': 30,
-        'state': 'NAVIGATING',
-        'progress': 0.4,
-        'message': 'running',
+      'task': task ?? {
+        'execution_id': '',
+        'command_id': '',
+        'task_id': 0,
+        'state': 'UNKNOWN',
+        'progress': 0,
+        'active_target_id': '',
+        'remaining_distance_m': 0,
+        'message': '尚未收到 TaskStatus',
       },
-    }, ConnectionKind.network);
+    };
 
-    expect(state.localizationOk, isTrue);
-    expect(state.speed, 0.25);
-    expect(state.task?.id, 30);
-    expect(state.progress, 0.4);
+void main() {
+  test('Task 30 payload never contains source', () {
+    final payload = buildHttpTaskPayload(
+      taskId: 30,
+      commandId: 'app-task30-1',
+      timestampMs: 123,
+    );
+
+    expect(payload['task_id'], 30);
+    expect(payload['user_confirmed'], false);
+    expect(payload['valid_for_ms'], 60000);
+    expect(payload.containsKey('source'), isFalse);
   });
 
-  test('missing physical telemetry remains unknown', () {
-    final state = VehicleState.fromJson({
-      'robot': {'system_state': 'SYSTEM_READY'},
-      'task': {'state': 'IDLE'},
-    }, ConnectionKind.network);
+  test('HTTP 200 means Gateway connected even when J6 is offline', () {
+    final snapshot = HilSnapshot.fromJson(
+      _state(j6Connected: false),
+      gatewayConnected: true,
+    );
 
-    expect(state.battery, -1);
-    expect(state.speed, -1);
-    expect(state.brushKnown, isFalse);
-    expect(state.waterPumpKnown, isFalse);
+    expect(snapshot.gatewayConnected, isTrue);
+    expect(snapshot.j6Connected, isFalse);
+    expect(snapshot.task.taskStatusPresent, isFalse);
+  });
+
+  test('HTTP 200 with j6_connected=true keeps both statuses separate', () {
+    final snapshot = HilSnapshot.fromJson(
+      _state(j6Connected: true),
+      gatewayConnected: true,
+    );
+
+    expect(snapshot.gatewayConnected, isTrue);
+    expect(snapshot.j6Connected, isTrue);
+  });
+
+  test('TaskStatus presence follows the local inference contract', () {
+    final absent = TaskStatusSnapshot.fromJson({
+      'execution_id': '',
+      'command_id': '',
+      'task_id': 0,
+      'state': 'UNKNOWN',
+    });
+    final present = TaskStatusSnapshot.fromJson({
+      'execution_id': 'execution-30',
+      'command_id': 'app-task30-1',
+      'task_id': 30,
+      'state': 'NAVIGATING',
+      'progress': 0.4,
+      'active_target_id': 'leaf-1',
+      'remaining_distance_m': 2.5,
+      'message': '正在导航至目标',
+    });
+
+    expect(absent.taskStatusPresent, isFalse);
+    expect(present.taskStatusPresent, isTrue);
+    expect(present.taskId, 30);
+    expect(present.taskState, 'NAVIGATING');
+    expect(present.taskProgress, 0.4);
   });
 
   test('OccupancyGrid contract preserves cells and transforms world pose', () {
@@ -75,26 +108,25 @@ void main() {
       'resolution': 0.5,
       'origin': {'x': 1.0, 'y': 2.0, 'yaw': 0.0},
       'data': [-1, 0, 50, 100],
+      'age_sec': 0.2,
       'robot_pose': {'x': 1.5, 'y': 2.5, 'yaw': 0.2},
     });
 
     expect(map.data, [-1, 0, 50, 100]);
+    expect(map.ageSec, 0.2);
     expect(map.worldToCell(1.5, 2.5).x, 1.0);
     expect(map.worldToCell(1.5, 2.5).y, 1.0);
   });
 
-  test('HTTP transport polls map and sends task30 to PC gateway', () async {
+  test('HTTP transport polls map and sends Task 30 without source', () async {
     final requests = <http.Request>[];
     final client = MockClient((request) async {
       requests.add(request);
       if (request.url.path == '/api/state') {
-        return http.Response(jsonEncode({
-          'robot': {'system_state': 'SYSTEM_READY'},
-          'task': {'state': 'IDLE'},
-        }), 200);
+        return _jsonResponse(_state(j6Connected: true), 200);
       }
       if (request.url.path == '/api/map') {
-        return http.Response(jsonEncode({
+        return _jsonResponse({
           'ok': true,
           'seq': 1,
           'frame_id': 'map',
@@ -104,19 +136,21 @@ void main() {
           'origin': {'x': 0, 'y': 0, 'yaw': 0},
           'data': [100],
           'robot_pose': null,
-        }), 200);
+        }, 200);
       }
       if (request.url.path == '/api/tasks') {
-        return http.Response(jsonEncode({'submitted': true}), 202);
+        return _jsonResponse({'submitted': true}, 202);
       }
-      return http.Response('{}', 404);
+      return _jsonResponse({}, 404);
     });
     final transport = HttpTransport(
       baseUrl: 'http://pc-gateway:18082',
       client: client,
     );
+    final snapshotFuture = transport.snapshots.first;
     final mapFuture = transport.maps.first;
     await transport.connect();
+    expect((await snapshotFuture).gatewayConnected, isTrue);
     expect((await mapFuture)?.data, [100]);
     await transport.sendTask(30);
     await transport.disconnect();
@@ -128,19 +162,21 @@ void main() {
     final payload = jsonDecode(taskRequest.body) as Map<String, dynamic>;
     expect(payload['task_id'], 30);
     expect(payload['valid_for_ms'], 60000);
+    expect(payload.containsKey('source'), isFalse);
     expect(requests.any((request) => request.url.path == '/api/map'), isTrue);
   });
 
-  test('HTTP transport exposes PC gateway task errors', () async {
+  test('HTTP failure emits Gateway disconnected without inventing J6 state', () async {
     final transport = HttpTransport(
       baseUrl: 'http://pc-gateway:18082',
-      client: MockClient((request) async => http.Response('J6 offline', 503)),
+      client: MockClient((request) async => http.Response('offline', 503)),
     );
+    final snapshotFuture = transport.snapshots.first;
 
-    await expectLater(
-      transport.sendTask(30),
-      throwsA(isA<TransportException>()),
-    );
+    await expectLater(transport.connect(), throwsA(isA<TransportException>()));
+    final snapshot = await snapshotFuture;
+    expect(snapshot.gatewayConnected, isFalse);
+    expect(snapshot.j6Connected, isNull);
     await transport.dispose();
   });
 }
