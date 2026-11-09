@@ -1,0 +1,8 @@
+tools/__pycache__/
+comparisons/
+RAW_MAP_QUALITY.json
+outputs/*
+!outputs/map_faithful_vector.png
+!outputs/map_faithful_vector.svg
+!outputs/map_conservative_geometry.svg
+!outputs/map_professional_floorplan.svg

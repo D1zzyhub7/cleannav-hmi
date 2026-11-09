@@ -39,15 +39,18 @@ class OccupancyMap {
   final double? ageSec;
   final MapRobotPose? robotPose;
 
-  factory OccupancyMap.fromJson(Map<String, dynamic> json) {
+  factory OccupancyMap.fromJson(Map<String, dynamic> response) {
+    // Formal V1 wraps the grid. Inner 'ok' is optional across snapshots.
+    final json = response['map'] is Map<String, dynamic>
+        ? response['map'] as Map<String, dynamic>
+        : response;
+    if (response['ok'] != true) throw const FormatException('地图响应不可用');
     final width = (json['width'] as num).toInt();
     final height = (json['height'] as num).toInt();
     final resolution = (json['resolution'] as num).toDouble();
     final originJson = json['origin'] as Map<String, dynamic>;
     final rawData = json['data'] as List<dynamic>;
-    if (
-        json['ok'] != true ||
-        width <= 0 ||
+    if (width <= 0 ||
         height <= 0 ||
         !resolution.isFinite ||
         resolution <= 0 ||

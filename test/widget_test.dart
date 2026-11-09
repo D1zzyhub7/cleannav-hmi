@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cleannav_mobile/screens/tasks_page.dart';
 
 import 'package:cleannav_mobile/controllers/app_controller.dart';
 import 'package:cleannav_mobile/main.dart';
@@ -8,6 +10,7 @@ import 'package:cleannav_mobile/screens/connection_page.dart';
 import 'package:cleannav_mobile/widgets/mission_map.dart';
 
 void main() {
+  setUp(() => SharedPreferences.setMockInitialValues({}));
   testWidgets('CleanNav app renders its competition HMI shell', (
     WidgetTester tester,
   ) async {
@@ -18,7 +21,7 @@ void main() {
     expect(find.byType(CleanNavApp), findsOneWidget);
   });
 
-  testWidgets('real RTAB map renders pose and unavailable pose notice', (
+  testWidgets('RTAB map renders pose and unavailable pose notice', (
     WidgetTester tester,
   ) async {
     final map = OccupancyMap.fromJson({
@@ -53,7 +56,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('connection page has only Gateway settings', (
+  testWidgets('connection page exposes Gateway token and admin target import', (
     WidgetTester tester,
   ) async {
     final controller = AppController();
@@ -66,7 +69,18 @@ void main() {
     expect(urlField.decoration?.hintText, '例如：http://10.218.39.57:18082');
     expect(find.text('蓝牙连接'), findsNothing);
     expect(find.text('进入演示'), findsNothing);
-    expect(find.text('访问令牌'), findsNothing);
+    expect(find.text('访问令牌'), findsOneWidget);
+    controller.dispose();
+  });
+  testWidgets('unconfigured Charger is explicit and cannot be executed',
+      (tester) async {
+    final controller = AppController();
+    await tester.pumpWidget(
+        MaterialApp(home: Scaffold(body: TasksPage(controller: controller))));
+    expect(find.text('尚未配置充电点'), findsOneWidget);
+    final button = tester
+        .widget<FilledButton>(find.widgetWithText(FilledButton, '返回充电等待位'));
+    expect(button.onPressed, isNull);
     controller.dispose();
   });
 }

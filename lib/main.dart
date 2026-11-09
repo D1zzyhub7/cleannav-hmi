@@ -16,19 +16,26 @@ class CleanNavApp extends StatefulWidget {
   State<CleanNavApp> createState() => _CleanNavAppState();
 }
 
-class _CleanNavAppState extends State<CleanNavApp> {
+class _CleanNavAppState extends State<CleanNavApp> with WidgetsBindingObserver {
   final AppController controller = AppController();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     controller.initialize();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     controller.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    controller.setForeground(state == AppLifecycleState.resumed);
   }
 
   @override

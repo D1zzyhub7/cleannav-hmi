@@ -14,3 +14,6 @@ ios/Flutter/flutter_export_environment.sh
 ios/Pods/
 ios/.symlinks/
 *.iml
+
+# Local offline release evidence and APKs
+offline-hardening-*/

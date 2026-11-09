@@ -1,0 +1,19 @@
+{
+  "map": {
+    "map_id": "patrol_pillar_v1_mapping_v1",
+    "revision": "2026-11-02T16:33:45.687945+00:00",
+    "sha256": "b09fd48018fa0e8b83aa24f66c76d8feec9dc5ab4d79633a2e1ea90743b4410f"
+  },
+  "regions": [
+    {
+      "region_id": "pillar_v1",
+      "display_name": "Pillar V1 south free rectangle"
+    }
+  ],
+  "chargers": [
+    {
+      "charger_id": "charger_sim_01",
+      "display_name": "Simulation staging 01 (no docking)"
+    }
+  ]
+}
