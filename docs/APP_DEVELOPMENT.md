@@ -1,3 +1,9 @@
+## 2026-11-11 原车电量与 IMU 只读显示（当前源码）
+
+当前手机源码在 2026-11-09 红米客户端上增加总览只读电量和 IMU。样本年龄超过 15 秒或缺失时显示未知。IMU 分三行显示姿态、加速度和角速度，不作为定位。开发者记录默认关闭，只保留手机本机最近 12 行摘要。
+
+手机已在车载 Wi-Fi 上看到电量和 IMU。定位、急停、任务和手机控车未接，不能写成整车联调完成。本仓库 Gateway 源码未改，版本号仍是 0.2.1+3。已安装 Debug APK 不纳入 Git，SHA256 `5968e977ce1c3a1f28cf866b6b6586a276662d8a4101d82525b7504d8f404ac8`。本轮只复跑了电量和 IMU 的契约测试，没有重跑完整回归。说明见仓库根 [README](../README.md)。以下各节是更早的发布记录。
+
 ## 2026-11-08 Final RC Closure（当前结论）
 
 **OFFLINE_RC_CANDIDATE_READY**：Analyze无问题、Flutter **70/70 PASS**、Python **7/7 PASS**，已在隔离Linux工具链构建并验签arm64-v8a Debug APK。默认C Professional Floorplan、A备用；地图/坐标/目标配置和A7/R9/B3/B4/B5冻结资产保持。
