@@ -117,6 +117,8 @@ class OverviewPage extends StatelessWidget {
         const SizedBox(height: 14),
         _safetyCard(context, snapshot),
         const SizedBox(height: 14),
+        _DeveloperLog(snapshot: snapshot),
+        const SizedBox(height: 14),
         FilledButton.icon(
           onPressed: openTasks,
           icon: const Icon(Icons.eco_rounded),
@@ -205,14 +207,27 @@ class OverviewPage extends StatelessWidget {
                             : snapshot.systemState == 'SYSTEM_READY'),
               ],
             ),
+            const SizedBox(height: 14),
+            _batteryMeter(snapshot.battery),
             const SizedBox(height: 12),
-            Text(
-                '${snapshot.systemState} · ${snapshot.systemMessage} · Safety ${snapshot.safetyFresh ? '新鲜' : '未知'} · block_all=${snapshot.blockAll ?? '未知'} · Lease=${snapshot.leaseOwner ?? '未知'}',
-                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
-            if (snapshot.speedMps != null) ...[
-              const SizedBox(height: 5),
-              Text('速度 ${formatOverviewSpeedMps(snapshot.speedMps!)} m/s',
-                  style: const TextStyle(color: AppColors.muted, fontSize: 11)),
+            _imuRow(snapshot.imu),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _infoChip('Safety', snapshot.safetyFresh ? '新鲜' : '未知'),
+                _infoChip('block_all', '${snapshot.blockAll ?? '未知'}'),
+                _infoChip('Lease', snapshot.leaseOwner ?? '未知'),
+                _infoChip('状态', snapshot.systemState),
+                if (snapshot.speedMps != null)
+                  _infoChip('速度', '${formatOverviewSpeedMps(snapshot.speedMps!)} m/s'),
+              ],
+            ),
+            if (snapshot.systemMessage.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(snapshot.systemMessage,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
             ],
           ],
         ),
@@ -393,6 +408,115 @@ class OverviewPage extends StatelessWidget {
         ),
       );
 
+  Widget _batteryMeter(VehicleBattery? battery) {
+    final known = battery?.known == true;
+    final color = !known
+        ? AppColors.muted
+        : battery!.soc! < 20
+            ? AppColors.amber
+            : AppColors.greenDark;
+    final fraction = known ? (battery!.soc! / 100).clamp(0.0, 1.0) : 0.0;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('电量',
+                style: TextStyle(color: AppColors.muted, fontSize: 12)),
+            const Spacer(),
+            Text(battery?.label ?? '未知',
+                style: TextStyle(
+                    color: color, fontSize: 28, fontWeight: FontWeight.w800)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(99),
+          child: LinearProgressIndicator(
+            value: fraction,
+            minHeight: 8,
+            backgroundColor: const Color(0xFFE4ECEA),
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _imuRow(VehicleImu? imu) {
+    final shown = imu;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF4F8F7),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        children: [
+          _imuLine('姿态', [
+            ['横滚', shown?.rollText ?? '未知'],
+            ['俯仰', shown?.pitchText ?? '未知'],
+            ['航向', shown?.yawText ?? '未知'],
+          ]),
+          _imuLine('加速度', [
+            ['X', shown?.accelX ?? '未知'],
+            ['Y', shown?.accelY ?? '未知'],
+            ['Z', shown?.accelZ ?? '未知'],
+          ]),
+          _imuLine('角速度', [
+            ['X', shown?.gyroX ?? '未知'],
+            ['Y', shown?.gyroY ?? '未知'],
+            ['Z', shown?.gyroZ ?? '未知'],
+          ]),
+        ],
+      ),
+    );
+  }
+
+  Widget _imuLine(String title, List<List<String>> values) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 48,
+              child: Text(title,
+                  style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            ),
+            for (final item in values)
+              Expanded(
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: '${item[0]} ',
+                      style: const TextStyle(color: AppColors.muted, fontSize: 11),
+                    ),
+                    TextSpan(
+                      text: item[1],
+                      style: const TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700),
+                    ),
+                  ]),
+                  maxLines: 1,
+                  overflow: TextOverflow.fade,
+                  softWrap: false,
+                ),
+              ),
+          ],
+        ),
+      );
+
+  Widget _infoChip(String label, String value) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF4F8F7),
+          borderRadius: BorderRadius.circular(99),
+        ),
+        child: Text('$label $value',
+            style: const TextStyle(color: AppColors.ink, fontSize: 11)),
+      );
+
   String _systemLabel(HilSnapshot s) {
     if (!s.gatewayConnected) return '网关离线';
     if (s.emergencyStop == true) return '急停锁存';
@@ -471,4 +595,108 @@ class OverviewPage extends StatelessWidget {
 String formatOverviewSpeedMps(double metersPerSecond) {
   final shown = metersPerSecond.toStringAsFixed(2);
   return shown == '-0.00' ? '0.00' : shown;
+}
+
+class _DeveloperLog extends StatefulWidget {
+  const _DeveloperLog({required this.snapshot});
+
+  final HilSnapshot snapshot;
+
+  @override
+  State<_DeveloperLog> createState() => _DeveloperLogState();
+}
+
+class _DeveloperLogState extends State<_DeveloperLog> {
+  bool enabled = false;
+  final List<String> lines = [];
+  String? previous;
+
+  void _append(HilSnapshot snapshot) {
+    final summary = _summary(snapshot);
+    if (summary == previous) return;
+    previous = summary;
+    final now = DateTime.now();
+    String two(int value) => value.toString().padLeft(2, '0');
+    lines.add(
+        '${two(now.hour)}:${two(now.minute)}:${two(now.second)}  $summary');
+    if (lines.length > 12) lines.removeAt(0);
+  }
+
+  String _summary(HilSnapshot snapshot) {
+    final gateway = snapshot.gatewayConnected ? 'Gateway 已连接' : 'Gateway 未连接';
+    final battery = snapshot.battery?.label ?? '未知';
+    final imu = snapshot.imu?.known == true
+        ? 'IMU ${snapshot.imu!.ageSec!.toStringAsFixed(1)}s'
+        : 'IMU 未知';
+    return '$gateway · 电量 $battery · $imu';
+  }
+
+  @override
+  void didUpdateWidget(covariant _DeveloperLog oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!enabled) return;
+    final before = previous;
+    _append(widget.snapshot);
+    if (previous != before) setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) => SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text('开发者记录',
+                      style: TextStyle(
+                          color: AppColors.ink,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800)),
+                ),
+                Switch(
+                  value: enabled,
+                  activeThumbColor: AppColors.greenDark,
+                  onChanged: (value) {
+                    setState(() {
+                      enabled = value;
+                      if (value) _append(widget.snapshot);
+                    });
+                  },
+                ),
+              ],
+            ),
+            Text(enabled ? '只显示本机收到的状态，不能输入' : '用户模式，记录已关闭',
+                style: const TextStyle(color: AppColors.muted, fontSize: 12)),
+            if (enabled) ...[
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF102A33),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: lines.isEmpty
+                    ? const Text('等待状态',
+                        style: TextStyle(color: Color(0xFFB9D7D0), fontSize: 12))
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final line in lines)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 4),
+                              child: SelectableText(line,
+                                  style: const TextStyle(
+                                      color: Color(0xFFD7EBE6),
+                                      fontSize: 12,
+                                      height: 1.35)),
+                            ),
+                        ],
+                      ),
+              ),
+            ],
+          ],
+        ),
+      );
 }

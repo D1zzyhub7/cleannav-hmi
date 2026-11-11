@@ -123,6 +123,30 @@ void main() {
     expect(snapshot.localizationOk, isNull);
     expect(snapshot.systemState, 'STATUS_STALE');
   });
+  test('battery and IMU stay visible when robot status is stale', () {
+    final body = state();
+    body['status_health'] = {};
+    body['battery'] = {'soc': 72.0, 'age_sec': 1.5};
+    body['imu'] = {
+      'age_sec': 1.5,
+      'orientation': {'x': 0.0, 'y': 0.0, 'z': 0.0, 'w': 1.0},
+      'angular_velocity': {'x': 0.0, 'y': 0.0, 'z': 0.0},
+      'linear_acceleration': {'x': -1.51, 'y': 0.0, 'z': 9.72},
+    };
+    final snapshot = HilSnapshot.fromJson(body, gatewayConnected: true);
+    expect(snapshot.localizationOk, isNull);
+    expect(snapshot.battery!.known, isTrue);
+    expect(snapshot.battery!.label, '72%');
+    expect(snapshot.imu!.known, isTrue);
+    expect(snapshot.imu!.label, contains('9.72'));
+    body['battery'] = {'soc': 72.0, 'age_sec': 30};
+    expect(
+      HilSnapshot.fromJson(body, gatewayConnected: true).battery!.label,
+      '未知',
+    );
+    body.remove('battery');
+    expect(HilSnapshot.fromJson(body, gatewayConnected: true).battery, isNull);
+  });
   test('V1 map wrapper preserves cells, pose and coordinate conversion', () {
     final map = OccupancyMap.fromJson(mapBody());
     expect(map.data, [-1, 0, 50, 100]);

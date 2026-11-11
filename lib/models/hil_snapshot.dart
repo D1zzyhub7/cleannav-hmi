@@ -101,6 +101,137 @@ class TaskStatusSnapshot {
   }
 }
 
+class VehicleBattery {
+  const VehicleBattery({this.soc, this.ageSec});
+
+  final double? soc;
+  final double? ageSec;
+
+  bool get known =>
+      soc != null && ageSec != null && ageSec! >= 0 && ageSec! <= 15;
+
+  String get label => known ? '${soc!.toStringAsFixed(0)}%' : '未知';
+
+  static VehicleBattery? fromJson(Object? value) {
+    if (value is! Map) return null;
+    return VehicleBattery(
+      soc: _finite(value['soc']),
+      ageSec: _finite(value['age_sec']),
+    );
+  }
+}
+
+class VehicleImu {
+  const VehicleImu({
+    this.ageSec,
+    this.orientation = const {},
+    this.angularVelocity = const {},
+    this.linearAcceleration = const {},
+  });
+
+  final double? ageSec;
+  final Map<String, dynamic> orientation;
+  final Map<String, dynamic> angularVelocity;
+  final Map<String, dynamic> linearAcceleration;
+
+  bool get known {
+    if (ageSec == null || ageSec! < 0 || ageSec! > 15) return false;
+    return _finite(linearAcceleration['x']) != null &&
+        _finite(linearAcceleration['y']) != null &&
+        _finite(linearAcceleration['z']) != null;
+  }
+
+  String get label {
+    if (!known) return '未知';
+    return '姿态 $attitudeText\n'
+        '加速度 $accelerationText m/s²\n'
+        '角速度 $gyroText';
+  }
+
+  String get rollText => _degrees()[0];
+  String get pitchText => _degrees()[1];
+  String get yawText => _degrees()[2];
+  String get accelX => _axis(linearAcceleration, 'x');
+  String get accelY => _axis(linearAcceleration, 'y');
+  String get accelZ => _axis(linearAcceleration, 'z');
+  String get gyroX => _axis(angularVelocity, 'x');
+  String get gyroY => _axis(angularVelocity, 'y');
+  String get gyroZ => _axis(angularVelocity, 'z');
+
+  List<String> _degrees() {
+    if (!known) return const ['未知', '未知', '未知'];
+    final x = _finite(orientation['x']);
+    final y = _finite(orientation['y']);
+    final z = _finite(orientation['z']);
+    final w = _finite(orientation['w']);
+    if (x == null || y == null || z == null || w == null) {
+      return const ['未知', '未知', '未知'];
+    }
+    final roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
+    final sinPitch = (2 * (w * y - z * x)).clamp(-1.0, 1.0).toDouble();
+    final pitch = math.asin(sinPitch);
+    final yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
+    String deg(double radians) => '${(radians * 180 / math.pi).toStringAsFixed(1)}°';
+    return [deg(roll), deg(pitch), deg(yaw)];
+  }
+
+  String _axis(Map<String, dynamic> value, String key) {
+    if (!known) return '未知';
+    final number = _finite(value[key]);
+    return number == null ? '未知' : number.toStringAsFixed(2);
+  }
+
+  String get attitudeText =>
+      known ? '$rollText $pitchText $yawText' : '未知';
+
+  String get accelerationText =>
+      known ? _vector(linearAcceleration) : '未知';
+
+  String get gyroText => known ? _vector(angularVelocity) : '未知';
+
+  static VehicleImu? fromJson(Object? value) {
+    if (value is! Map) return null;
+    return VehicleImu(
+      ageSec: _finite(value['age_sec']),
+      orientation: _xyzw(value['orientation']),
+      angularVelocity: _xyz(value['angular_velocity']),
+      linearAcceleration: _xyz(value['linear_acceleration']),
+    );
+  }
+
+  static String _vector(Map<String, dynamic> value) {
+    final x = _finite(value['x']);
+    final y = _finite(value['y']);
+    final z = _finite(value['z']);
+    if (x == null || y == null || z == null) return '未知';
+    return '${x.toStringAsFixed(2)} ${y.toStringAsFixed(2)} ${z.toStringAsFixed(2)}';
+  }
+}
+
+double? _finite(Object? value) {
+  if (value is num && value.isFinite) return value.toDouble();
+  return null;
+}
+
+Map<String, dynamic> _xyz(Object? value) {
+  if (value is! Map) return const {};
+  return {
+    'x': value['x'],
+    'y': value['y'],
+    'z': value['z'],
+  };
+}
+
+Map<String, dynamic> _xyzw(Object? value) {
+  if (value is! Map) return const {};
+  return {
+    'x': value['x'],
+    'y': value['y'],
+    'z': value['z'],
+    'w': value['w'],
+  };
+}
+
 class HilSnapshot {
   const HilSnapshot(
       {required this.gatewayConnected,
@@ -121,7 +252,9 @@ class HilSnapshot {
       this.mapIdentity,
       this.sequence = const {},
       this.lastCommand = const {},
-      this.connection = const {}});
+      this.connection = const {},
+      this.battery,
+      this.imu});
   final bool gatewayConnected;
   final bool? missionConnected;
   final bool? localizationOk;
@@ -141,6 +274,8 @@ class HilSnapshot {
   final Map<String, dynamic> sequence;
   final Map<String, dynamic> lastCommand;
   final Map<String, dynamic> connection;
+  final VehicleBattery? battery;
+  final VehicleImu? imu;
 
   factory HilSnapshot.unconfigured() =>
       HilSnapshot.disconnected('请先配置 Gateway 地址');
@@ -227,6 +362,8 @@ class HilSnapshot {
               ? (robot['linear_velocity_mps'] as num).toDouble()
               : null)
           : null,
+      battery: VehicleBattery.fromJson(json['battery']),
+      imu: VehicleImu.fromJson(json['imu']),
     );
   }
   static MapRobotPose? _pose(Object? value) {
