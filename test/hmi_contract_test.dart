@@ -473,7 +473,7 @@ void main() {
         throwsA(predicate((e) => e.toString().contains('身份不一致'))));
     expect(posts, 0);
     final prefs = await SharedPreferences.getInstance();
-    expect(prefs.getString('gateway_token'), isNull);
+    expect(prefs.getString('gateway_token'), token);
     expect(controller.token, token);
     expect(authorization, isNotEmpty);
     expect(authorization.every((value) => value == 'Bearer $token'), isTrue);
@@ -501,15 +501,15 @@ void main() {
     expect(logs.join('\n'), isNot(contains(token)));
     expect(authorization.last, 'Bearer $token');
     final restartedClient = MockClient((r) async {
-      expect(r.headers.containsKey('Authorization'), isFalse);
+      expect(r.headers['Authorization'], 'Bearer $token');
       return initial(r);
     });
     final restarted = AppController(client: restartedClient);
     addTearDown(restarted.dispose);
     addTearDown(restartedClient.close);
     await restarted.initialize();
-    expect(restarted.token, isEmpty);
-    expect(prefs.getString('gateway_token'), isNull);
+    expect(restarted.token, token);
+    expect(prefs.getString('gateway_token'), token);
     expect(restarted.selectedRegionId, 'region-test');
     expect(restarted.registry!.map.revision, 'r2');
     expect(restarted.registry!.chargers, isEmpty);

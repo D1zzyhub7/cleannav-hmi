@@ -246,7 +246,7 @@ void main() {
     c.dispose();
   });
   test(
-      'controller reconnect/restart retains receipt and session token is not persisted',
+      'controller reconnect/restart retains receipt and saved gateway token',
       () async {
     var posts = 0;
     final client = MockClient((r) async {
@@ -280,9 +280,9 @@ void main() {
     c.dispose();
     c = AppController(client: client);
     await c.initialize();
-    expect(c.token, '');
+    expect(c.token, 'session-secret');
     expect((await SharedPreferences.getInstance()).getString('gateway_token'),
-        null);
+        'session-secret');
     expect(c.submissions.single.statusUrl, url);
     expect(posts, 1);
     c.dispose();

@@ -68,7 +68,7 @@ Ubuntu22.04实际包版本：python3-opencv4.5.4+dfsg-9ubuntu4；python3-numpy1:
 
 ## Offline Hardening 使用说明
 
-- Token 只在当前进程内存中保存。启动时移除旧 `gateway_token` 明文项；重启后手动重填。未新增安全存储插件，未宣称实现 Android Keystore。HTTP cleartext 仍保留既有局域网兼容性，不能提供链路加密；受信网络外应使用现有 HTTPS 部署。
+- 实验室地址和 Gateway Token 保存在本机 `api_base`、`gateway_token`。同一把密钥可以一直使用，打开 APP 会直接连接。未使用 Android Keystore。HTTP cleartext 仍只适合这辆车的局域网。
 - 回执按规范化 Gateway base URL 隔离，保存在 `task_receipts:<base>`。只含 task_id/command_id/sequence_id/status_url，不含 Token。导航提交前落盘（STOP/ESTOP先发送、后尝试保存，不因磁盘失败阻止发送）；202 仅表示接收，不等于完成。重启、重连、前台恢复均只 GET 原 status_url。未知结果或查询失败不自动重新 POST。请勿清除应用数据来“恢复”连接。
 - SUCCEEDED/FAILED/REJECTED/CANCELED/EMERGENCY_STOPPED 停止追踪并从持久回执中清除；内存仅保留最近20条终态历史。404/GET timeout 保留身份，显示 UNKNOWN，不宣告成功。回执损坏时保留数据并报告错误，不自动删除再下单。
 - 状态新鲜度以最后成功 GET 的本机时间计，默认5秒过期，现有1秒 Timer检查；后台立即清除动态位姿和 Safety/网关状态，取消现有 Timer，前台仅 GET 更新。已有请求 single-flight，回调代次检查避免后台旧结果覆盖。

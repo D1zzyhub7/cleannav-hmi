@@ -59,8 +59,7 @@ class AppController extends ChangeNotifier {
     );
     if (_disposed) return;
     apiBase = prefs.getString('api_base') ?? '';
-    // Tokens are session-only; migrate away from legacy plaintext preferences.
-    await prefs.remove('gateway_token');
+    token = prefs.getString('gateway_token') ?? '';
     registryJson = prefs.getString('target_registry_json') ??
         await rootBundle.loadString('assets/app_targets.json');
     if (_disposed) return;
@@ -113,7 +112,9 @@ class AppController extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         _preferences = prefs;
         await prefs.setString('api_base', apiBase);
-        await prefs.remove('gateway_token');
+        if (token.isNotEmpty) {
+          await prefs.setString('gateway_token', token);
+        }
       }
       await _activate(HttpTransport(
           baseUrl: apiBase,
